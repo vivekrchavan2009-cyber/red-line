@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Redline — AI Text Repair</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.7.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<style>
+:root{
+  --bg:#15141a;
+  --bg-elev:#1c1b22;
+  --bg-elev-2:#232229;
+  --border:#302e38;
+  --border-soft:#26242c;
+  --text:#eae7e2;
+  --text-dim:#9d99a8;
+  --text-faint:#6b6876;
+  --red:#d6483d;
+  --red-soft:rgba(214,72,61,.15);
+  --teal:#4f9d84;
+  --teal-soft:rgba(79,157,132,.15);
+  --amber:#c99a3d;
+  --amber-soft:rgba(201,154,61,.15);
+  --violet:#8f6bb0;
+  --violet-soft:rgba(143,107,176,.15);
+  --blue:#4f7bc9;
+  --blue-soft:rgba(79,123,201,.15);
+  --radius:4px;
+  --serif:'Lora', Georgia, serif;
+  --sans:'Inter', -apple-system, sans-serif;
+  --mono:'IBM Plex Mono', ui-monospace, monospace;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;min-height:100vh;}
+::selection{background:var(--red-soft);}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 32px;border-bottom:1px solid var(--border-soft);
+  position:sticky;top:0;background:rgba(21,20,26,.94);backdrop-filter:blur(6px);z-index:10;
+}
+.brand{display:flex;align-items:baseline;gap:9px;}
+.brand-mark{font-family:var(--serif);font-weight:700;font-size:20px;}
+.brand-mark em{font-style:normal;color:var(--red);text-decoration:underline;text-decoration-color:var(--red);text-underline-offset:3px;}
+.nav{display:flex;gap:4px;}
+.nav-tab{padding:8px 14px;border-radius:var(--radius);color:var(--text-dim);cursor:pointer;font-size:13.5px;font-weight:500;border:1px solid transparent;}
+.nav-tab:hover{background:var(--bg-elev);color:var(--text);}
+.nav-tab.active{background:var(--bg-elev);border-color:var(--border);color:var(--text);}
+
+.view{max-width:1180px;margin:0 auto;padding:32px;}
+.view[hidden]{display:none;}
+
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-elev-2);color:var(--text);font-size:13px;font-weight:500;cursor:pointer;transition:border-color .12s,background .12s;}
+.btn:hover{border-color:#3f3d49;background:#282631;}
+.btn-primary{background:var(--red);border-color:var(--red);color:#fff;font-weight:600;}
+.btn-primary:hover{background:#c33d33;border-color:#c33d33;}
+.btn-ghost{background:transparent;border-color:transparent;color:var(--text-dim);}
+.btn-ghost:hover{background:var(--bg-elev-2);color:var(--text);}
+.btn-sm{padding:6px 11px;font-size:12px;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+
+.hero{margin-bottom:26px;}
+.hero h1{font-family:var(--serif);font-size:28px;font-weight:700;margin:0 0 8px;max-width:600px;}
+.hero p{color:var(--text-dim);max-width:560px;margin:0;font-size:14.5px;line-height:1.6;}
+
+.input-card{background:var(--bg-elev);border:1px solid var(--border-soft);border-radius:var(--radius);padding:4px;}
+textarea#input-text{
+  width:100%;min-height:280px;background:transparent;border:none;color:var(--text);
+  font-family:var(--serif);font-size:16px;line-height:1.7;padding:20px;resize:vertical;
+}
+textarea#input-text:focus{outline:none;}
+textarea#input-text::placeholder{color:var(--text-faint);font-style:italic;}
+
+.input-toolbar{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-top:1px solid var(--border-soft);flex-wrap:wrap;gap:10px;}
+.input-toolbar .left{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.counter{color:var(--text-faint);font-size:12px;}
+
+.mode-row{display:flex;gap:8px;margin:18px 0;}
+.mode-card{flex:1;border:1px solid var(--border-soft);border-radius:var(--radius);padding:13px 15px;cursor:pointer;background:var(--bg-elev);}
+.mode-card.active{border-color:var(--red);background:var(--red-soft);}
+.mode-card .mt{font-family:var(--serif);font-weight:700;font-size:14.5px;margin-bottom:3px;}
+.mode-card .ms{color:var(--text-dim);font-size:12px;line-height:1.5;}
+
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:18px;}
+.field label{font-size:12.5px;color:var(--text-dim);font-weight:500;}
+.field .fh{font-size:11.5px;color:var(--text-faint);}
+.field input[type=text],.field input[type=password],.field select{background:var(--bg-elev);border:1px solid var(--border);color:var(--text);padding:9px 11px;border-radius:var(--radius);font-size:13px;}
+
+/* results */
+.score-row{display:flex;gap:18px;align-items:center;margin-bottom:22px;flex-wrap:wrap;}
+.score-pill{display:flex;align-items:baseline;gap:6px;}
+.score-pill .sv{font-family:var(--serif);font-size:26px;font-weight:700;}
+.score-pill.before .sv{color:var(--text-faint);}
+.score-pill.after .sv{color:var(--teal);}
+.score-pill .sl{font-size:11px;color:var(--text-faint);}
+.arrow-sep{color:var(--text-faint);font-size:16px;}
+
+.cat-summary{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px;}
+.cat-chip{display:flex;align-items:center;gap:6px;padding:6px 11px;border-radius:14px;background:var(--bg-elev);border:1px solid var(--border-soft);font-size:12px;color:var(--text-dim);}
+.cat-chip i{width:8px;height:8px;border-radius:2px;display:inline-block;}
+.cat-chip b{color:var(--text);}
+
+.diff-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px;}
+.diff-pane{background:var(--bg-elev);border:1px solid var(--border-soft);border-radius:var(--radius);overflow:hidden;}
+.diff-pane .dp-head{padding:9px 16px;border-bottom:1px solid var(--border-soft);font-size:11.5px;color:var(--text-faint);letter-spacing:.02em;}
+.diff-pane .dp-body{padding:20px;font-family:var(--serif);font-size:15.5px;line-height:1.8;white-space:pre-wrap;max-height:560px;overflow:auto;}
+mark.chg{border-radius:2px;padding:0 1px;cursor:pointer;}
+mark.chg.cat-grammar,mark.chg.cat-punctuation{background:var(--blue-soft);box-shadow:inset 0 -1.5px 0 var(--blue);}
+mark.chg.cat-spelling{background:var(--red-soft);box-shadow:inset 0 -1.5px 0 var(--red);}
+mark.chg.cat-wordchoice{background:var(--amber-soft);box-shadow:inset 0 -1.5px 0 var(--amber);}
+mark.chg.cat-repetition{background:var(--violet-soft);box-shadow:inset 0 -1.5px 0 var(--violet);text-decoration:line-through;text-decoration-color:var(--violet);}
+mark.chg.cat-style{background:var(--teal-soft);box-shadow:inset 0 -1.5px 0 var(--teal);}
+mark.chg.selected{outline:1.5px solid var(--text);}
+
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;font-size:11.5px;color:var(--text-dim);}
+.legend span{display:inline-flex;align-items:center;gap:5px;}
+.legend i{width:9px;height:9px;border-radius:2px;display:inline-block;}
+.legend i.grammar{background:var(--blue);} .legend i.spelling{background:var(--red);}
+.legend i.wordchoice{background:var(--amber);} .legend i.repetition{background:var(--violet);}
+.legend i.style{background:var(--teal);}
+
+.inspector{background:var(--bg-elev);border:1px solid var(--border-soft);border-radius:var(--radius);padding:16px 18px;margin-bottom:18px;}
+.inspector .ins-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.inspector .cat-tag{font-size:11px;padding:2px 9px;border-radius:10px;}
+.inspector .conf{font-family:var(--mono);font-size:11.5px;color:var(--text-dim);}
+.inspector .ins-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px;}
+.inspector .ins-label{font-size:10.5px;color:var(--text-faint);margin-bottom:4px;}
+.inspector .ins-text{font-family:var(--mono);font-size:12.5px;background:var(--bg-elev-2);padding:8px 10px;border-radius:3px;}
+.inspector .reason{font-size:13px;color:var(--text-dim);line-height:1.6;}
+
+.issue-list{display:flex;flex-direction:column;gap:6px;margin-bottom:22px;}
+.issue-row{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--border-soft);border-radius:3px;cursor:pointer;font-size:12.5px;}
+.issue-row:hover{border-color:var(--border);background:var(--bg-elev-2);}
+.issue-row .cdot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.issue-row .isum{flex:1;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.issue-row .icat{color:var(--text-faint);font-size:11px;}
+.issue-row .iconf{font-family:var(--mono);font-size:11px;color:var(--text-faint);width:44px;text-align:right;}
+
+.verify-panel{border-radius:var(--radius);padding:14px 18px;margin-bottom:22px;font-size:13px;line-height:1.6;}
+.verify-panel.pass{background:var(--teal-soft);border:1px solid var(--teal);color:var(--teal);}
+.verify-panel.fail{background:var(--red-soft);border:1px solid var(--red);color:var(--red);}
+.verify-panel .vp-notes{color:var(--text-dim);margin-top:4px;}
+
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;}
+
+/* test mode */
+.test-table{width:100%;border-collapse:collapse;font-size:13px;}
+.test-table th{text-align:left;color:var(--text-faint);font-weight:500;font-size:11.5px;padding:8px 10px;border-bottom:1px solid var(--border);}
+.test-table td{padding:11px 10px;border-bottom:1px solid var(--border-soft);vertical-align:top;}
+.test-snip{font-family:var(--mono);font-size:11.5px;color:var(--text-dim);max-width:280px;}
+.pass-badge{padding:2px 9px;border-radius:10px;font-size:11px;}
+.pass-badge.good{background:var(--teal-soft);color:var(--teal);}
+.pass-badge.mid{background:var(--amber-soft);color:var(--amber);}
+.pass-badge.bad{background:var(--red-soft);color:var(--red);}
+.accuracy-hero{display:flex;align-items:baseline;gap:12px;margin-bottom:22px;}
+.accuracy-hero .av{font-family:var(--serif);font-size:44px;font-weight:700;color:var(--teal);}
+.accuracy-hero .al{color:var(--text-dim);font-size:13px;}
+
+.progress-log{margin-top:14px;font-family:var(--mono);font-size:11.5px;color:var(--text-dim);display:flex;flex-direction:column;gap:3px;max-height:160px;overflow:auto;}
+.progress-log .step.active{color:var(--red);}
+
+.settings-grid{display:flex;flex-direction:column;gap:4px;max-width:560px;}
+.section-title{font-family:var(--serif);font-size:16px;font-weight:700;margin:0 0 12px;}
+
+.toast-wrap{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:100;}
+.toast{background:var(--bg-elev-2);border:1px solid var(--border);border-radius:var(--radius);padding:11px 16px;font-size:13px;max-width:320px;box-shadow:0 8px 24px rgba(0,0,0,.4);}
+.toast.error{border-color:var(--red);color:#f5b3ac;}
+.toast.success{border-color:var(--teal);}
+
+.empty-state{padding:60px 20px;text-align:center;color:var(--text-faint);}
+.empty-state .es-title{font-family:var(--serif);color:var(--text-dim);font-size:17px;margin-bottom:6px;}
+
+@media (max-width:820px){
+  .diff-grid{grid-template-columns:1fr;}
+  .mode-row{flex-direction:column;}
+  .topbar{padding:14px 16px;}
+  .view{padding:20px;}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><span class="brand-mark">Red<em>line</em></span></div>
+  <nav class="nav">
+    <div class="nav-tab active" data-view="repair">Repair</div>
+    <div class="nav-tab" data-view="test">Test Mode</div>
+    <div class="nav-tab" data-view="settings">Settings</div>
+  </nav>
+</div>
+
+<!-- REPAIR: INPUT STAGE -->
+<section class="view" id="view-input">
+  <div class="hero">
+    <h1>Text that reads like it was actually written by someone.</h1>
+    <p>Redline finds grammar, clarity, and flow problems the way a copyeditor would — reads the whole passage, understands what it means, then fixes only what's actually wrong.</p>
+  </div>
+
+  <div class="input-card">
+    <textarea id="input-text" placeholder="Paste or type the text you want repaired…"></textarea>
+    <div class="input-toolbar">
+      <div class="left">
+        <button class="btn btn-sm" id="btn-upload">Upload document</button>
+        <input type="file" id="file-input" accept=".txt,.pdf,.docx" style="display:none;">
+        <button class="btn btn-sm btn-ghost" id="btn-clear">Clear</button>
+      </div>
+      <span class="counter" id="counter">0 words · 0 characters</span>
+    </div>
+  </div>
+
+  <div class="mode-row">
+    <div class="mode-card active" data-mode="quick">
+      <div class="mt">Quick Repair</div>
+      <div class="ms">Grammar, spelling, punctuation, and obvious word-choice errors only. Nothing else touched.</div>
+    </div>
+    <div class="mode-card" data-mode="smart">
+      <div class="mt">Smart Repair</div>
+      <div class="ms">Also improves clarity, flow, repetition, and sentence structure — keeps your voice.</div>
+    </div>
+    <div class="mode-card" data-mode="professional">
+      <div class="mt">Professional Rewrite</div>
+      <div class="ms">Bigger stylistic changes for tone and readability. Meaning is still fully preserved.</div>
+    </div>
+  </div>
+
+  <button class="btn btn-primary" id="btn-repair">Repair Text</button>
+  <span class="counter" id="mode-note" style="margin-left:10px;">Quick Repair: fixes only clear, objective errors.</span>
+
+  <div class="progress-log" id="progress-log"></div>
+</section>
+
+<!-- REPAIR: RESULTS STAGE -->
+<section class="view" id="view-results" hidden>
+  <div class="toolbar">
+    <button class="btn btn-ghost btn-sm" id="btn-back">← New repair</button>
+    <span style="flex:1;"></span>
+    <button class="btn btn-sm" id="btn-copy">Copy repaired text</button>
+    <button class="btn btn-sm" id="btn-export-txt">Export .txt</button>
+    <button class="btn btn-sm" id="btn-export-docx">Export .docx</button>
+    <button class="btn btn-sm" id="btn-export-pdf">Export .pdf</button>
+  </div>
+
+  <div class="score-row">
+    <div class="score-pill before"><span class="sv" id="score-before">–</span><span class="sl">BEFORE</span></div>
+    <span class="arrow-sep">→</span>
+    <div class="score-pill after"><span class="sv" id="score-after">–</span><span class="sl">AFTER</span></div>
+    <span class="counter" id="issue-count-label"></span>
+  </div>
+
+  <div id="verify-panel-wrap"></div>
+
+  <div class="cat-summary" id="cat-summary"></div>
+
+  <div class="legend">
+    <span><i class="grammar"></i>Grammar &amp; punctuation</span>
+    <span><i class="spelling"></i>Spelling</span>
+    <span><i class="wordchoice"></i>Word choice</span>
+    <span><i class="repetition"></i>Repetition removed</span>
+    <span><i class="style"></i>Clarity &amp; flow</span>
+  </div>
+
+  <div class="diff-grid">
+    <div class="diff-pane">
+      <div class="dp-head">ORIGINAL</div>
+      <div class="dp-body" id="pane-original"></div>
+    </div>
+    <div class="diff-pane">
+      <div class="dp-head">REPAIRED</div>
+      <div class="dp-body" id="pane-repaired"></div>
+    </div>
+  </div>
+
+  <div class="inspector" id="inspector" hidden></div>
+
+  <div class="section-title">All issues</div>
+  <div class="issue-list" id="issue-list"></div>
+</section>
+
+<!-- TEST MODE -->
+<section class="view" id="view-test" hidden>
+  <div class="hero">
+    <h1>Test mode</h1>
+    <p>Runs a fixed set of sentences with known, hand-annotated errors through your configured AI backend, and scores how closely the repair matches an expected "gold" correction. This is a rough word-overlap heuristic, not a linguistic grader — treat the score as directional, not exact.</p>
+  </div>
+  <button class="btn btn-primary" id="btn-run-tests">Run Test Suite</button>
+  <div class="progress-log" id="test-log"></div>
+  <div id="test-results" style="margin-top:22px;"></div>
+</section>
+
+<!-- SETTINGS -->
+<section class="view" id="view-settings" hidden>
+  <div class="hero"><h1>Settings</h1></div>
+  <div class="settings-grid">
+    <div class="field">
+      <label>AI backend</label>
+      <select id="set-backend">
+        <option value="claude">Claude — your own API key</option>
+        <option value="groq">Groq — free tier</option>
+      </select>
+      <div class="fh">Claude's API explicitly supports being called straight from a browser. Groq's generally does not (no CORS) — see below before choosing it.</div>
+    </div>
+
+    <div id="settings-claude">
+      <div class="field">
+        <label>Claude API key</label>
+        <input type="password" id="set-apikey" placeholder="sk-ant-...">
+        <div class="fh">Stored only in this browser's local storage. Sent directly to api.anthropic.com — there is no Redline server.</div>
+      </div>
+      <div class="field">
+        <label>Model</label>
+        <input type="text" id="set-model" placeholder="claude-sonnet-5">
+      </div>
+    </div>
+
+    <div id="settings-groq">
+      <div class="field">
+        <label>Groq API key</label>
+        <input type="password" id="set-groqkey" placeholder="gsk_...">
+        <div class="fh">Free at console.groq.com/keys.</div>
+      </div>
+      <div class="field">
+        <label>Groq model</label>
+        <input type="text" id="set-groqmodel" placeholder="openai/gpt-oss-120b">
+      </div>
+      <div class="field">
+        <label>Groq endpoint override (needed for it to actually work)</label>
+        <input type="text" id="set-groqendpoint" placeholder="https://api.groq.com/openai/v1/chat/completions">
+        <div class="fh" style="color:var(--red);">Groq's API blocks direct browser requests (no CORS), so calling it straight from this page will fail with "Failed to fetch" on any device. Deploy a small free CORS-proxy (a Cloudflare Worker, ~10 lines) and paste its URL here to actually use Groq — ask if you want the ready-made script. Without this, use Claude.</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Max input tokens per request</label>
+      <input type="text" id="set-maxinput" placeholder="2200">
+      <div class="fh">Long text is split into sections at paragraph/sentence boundaries to stay under this budget and avoid rate-limit errors.</div>
+    </div>
+    <div class="field">
+      <label>Max retries on rate limit</label>
+      <input type="text" id="set-maxretries" placeholder="4">
+    </div>
+    <div class="toggle-row" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border-soft);">
+      <div><div style="font-size:13px;">Run verification pass</div><div class="fh">A second AI pass checks the repair for preserved meaning and any newly introduced errors before showing results.</div></div>
+      <label style="position:relative;width:38px;height:21px;flex-shrink:0;">
+        <input type="checkbox" id="set-verify" style="opacity:0;width:0;height:0;">
+        <span id="verify-slider" style="position:absolute;inset:0;background:var(--bg-elev-2);border:1px solid var(--border);border-radius:20px;cursor:pointer;"></span>
+      </label>
+    </div>
+    <div style="margin-top:18px;">
+      <button class="btn" id="btn-save-settings">Save settings</button>
+    </div>
+  </div>
+</section>
+
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script>
+/* ======================= SETTINGS ======================= */
+const SETTINGS_KEY = 'redline_settings_v1';
+function defaultSettings(){
+  return {
+    backend:'claude', apiKey:'', model:'claude-sonnet-5',
+    groqKey:'', groqModel:'openai/gpt-oss-120b', groqEndpoint:'',
+    maxInputTokens:2200, maxOutputTokens:1400, maxRetries:4, enableFallback:true,
+    runVerification:true
+  };
+}
+function loadSettings(){
+  try{ return Object.assign(defaultSettings(), JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')); }
+  catch(e){ return defaultSettings(); }
+}
+function saveSettingsToStorage(s){ localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }
+let settings = loadSettings();
+
+/* ======================= UTIL ======================= */
+function toast(msg, kind){
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind?(' '+kind):'');
+  el.textContent = msg;
+  document.getElementById('toast-wrap').appendChild(el);
+  setTimeout(()=>el.remove(), 5200);
+}
+function escapeHtml(s){ return (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function sleep(ms){ return new Promise(res=>setTimeout(res, ms)); }
+function estimateTokens(t){ return Math.max(1, Math.ceil((t||'').length/4)); }
+
+/* ======================= NAVIGATION ======================= */
+function showView(name){
+  ['input','results','test','settings'].forEach(v=>{
+    const el = document.getElementById('view-'+v);
+    if(el) el.hidden = (v!==name && !(name==='repair' && v==='input'));
+  });
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.toggle('active', t.dataset.view===name || (name==='repair' && t.dataset.view==='repair')));
+  if(name==='settings') renderSettings();
+}
+document.querySelectorAll('.nav-tab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    const v = t.dataset.view;
+    if(v==='repair'){ document.getElementById('view-input').hidden=false; document.getElementById('view-results').hidden=true; document.getElementById('view-test').hidden=true; document.getElementById('view-settings').hidden=true; }
+    else if(v==='test'){ document.getElementById('view-input').hidden=true; document.getElementById('view-results').hidden=true; document.getElementById('view-test').hidden=false; document.getElementById('view-settings').hidden=true; }
+    else if(v==='settings'){ document.getElementById('view-input').hidden=true; document.getElementById('view-results').hidden=true; document.getElementById('view-test').hidden=true; document.getElementById('view-settings').hidden=false; renderSettings(); }
+    document.querySelectorAll('.nav-tab').forEach(x=>x.classList.toggle('active', x===t));
+  });
+});
+document.getElementById('btn-back').addEventListener('click', ()=>{
+  document.getElementById('view-results').hidden = true;
+  document.getElementById('view-input').hidden = false;
+  document.querySelectorAll('.nav-tab').forEach(x=>x.classList.toggle('active', x.dataset.view==='repair'));
+});
+
+/* ======================= INPUT STAGE ======================= */
+let repairMode = 'quick';
+document.querySelectorAll('.mode-card').forEach(card=>{
+  card.addEventListener('click', ()=>{
+    document.querySelectorAll('.mode-card').forEach(c=>c.classList.remove('active'));
+    card.classList.add('active');
+    repairMode = card.dataset.mode;
+    const notes = {
+      quick:'Quick Repair: fixes only clear, objective errors.',
+      smart:'Smart Repair: also improves clarity, flow, and repetition.',
+      professional:'Professional Rewrite: bigger stylistic changes — meaning still fully preserved.'
+    };
+    document.getElementById('mode-note').textContent = notes[repairMode];
+  });
+});
+
+const inputText = document.getElementById('input-text');
+function updateCounter(){
+  const t = inputText.value;
+  const words = t.trim() ? t.trim().split(/\s+/).length : 0;
+  document.getElementById('counter').textContent = `${words} words · ${t.length} characters`;
+}
+inputText.addEventListener('input', updateCounter);
+document.getElementById('btn-clear').addEventListener('click', ()=>{ inputText.value=''; updateCounter(); inputText.focus(); });
+
+document.getElementById('btn-upload').addEventListener('click', ()=>document.getElementById('file-input').click());
+document.getElementById('file-input').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    const text = await extractDocumentText(file);
+    inputText.value = text;
+    updateCounter();
+    toast('Loaded "'+file.name+'".', 'success');
+  }catch(err){
+    toast('Could not read that file: ' + err.message, 'error');
+  }
+  e.target.value = '';
+});
+async function extractDocumentText(file){
+  const ext = file.name.split('.').pop().toLowerCase();
+  if(ext==='txt') return await file.text();
+  if(ext==='docx'){
+    const buf = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({arrayBuffer:buf});
+    return result.value;
+  }
+  if(ext==='pdf'){
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const buf = await file.arrayBuffer();
+    const doc = await pdfjsLib.getDocument({data:buf}).promise;
+    let text = '';
+    for(let i=1;i<=doc.numPages;i++){
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      text += (i>1?'\n\n':'') + content.items.map(it=>it.str).join(' ');
+    }
+    return text;
+  }
+  throw new Error('Unsupported file type — use TXT, PDF, or DOCX.');
+}
+
+/* ======================= AI CALLING (retry + fallback, same pattern proven in Scriptorium) ======================= */
+const RETRY_DELAYS_MS = [2000,5000,10000,20000];
+function attachRateLimitInfo(err, resp, errText){
+  const looksRateLimited = resp.status===429 || /rate.?limit/i.test(errText||'');
+  if(looksRateLimited){
+    err.isRateLimit = true;
+    const ra = resp.headers && resp.headers.get && resp.headers.get('retry-after');
+    if(ra){ const secs = parseFloat(ra); if(!isNaN(secs)) err.retryAfterMs = secs*1000; }
+  }
+}
+async function callClaude({system, userText}){
+  if(!settings.apiKey){ throw new Error('No Claude API key set. Add one in Settings.'); }
+  const body = { model: settings.model || 'claude-sonnet-5', max_tokens: settings.maxOutputTokens||1400, system, messages:[{role:'user', content:userText}] };
+  let resp;
+  try{
+    resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{ 'content-type':'application/json', 'x-api-key': settings.apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
+      body: JSON.stringify(body)
+    });
+  }catch(networkErr){ throw new Error('Could not reach Claude (' + networkErr.message + ').'); }
+  if(!resp.ok){
+    const errText = await resp.text();
+    const err = new Error('Claude API error ' + resp.status + ': ' + errText.slice(0,200));
+    attachRateLimitInfo(err, resp, errText);
+    throw err;
+  }
+  const data = await resp.json();
+  const textBlock = (data.content||[]).find(b=>b.type==='text');
+  if(!textBlock) throw new Error('No text in AI response.');
+  return textBlock.text;
+}
+async function callGroq({system, userText}){
+  if(!settings.groqKey){ throw new Error('No Groq API key set. Add one in Settings — free at console.groq.com/keys.'); }
+  const body = { model: settings.groqModel||'openai/gpt-oss-120b', max_tokens: settings.maxOutputTokens||1400, temperature:0.2, messages:[{role:'system',content:system},{role:'user',content:userText}] };
+  const endpoint = (settings.groqEndpoint && settings.groqEndpoint.trim()) || 'https://api.groq.com/openai/v1/chat/completions';
+  let resp;
+  try{
+    resp = await fetch(endpoint, { method:'POST', headers:{ 'content-type':'application/json', 'authorization':'Bearer '+settings.groqKey }, body: JSON.stringify(body) });
+  }catch(networkErr){
+    throw new Error('Could not reach Groq (' + networkErr.message + '). Groq blocks direct browser requests (no CORS) — set a Groq endpoint override in Settings, or switch to Claude.');
+  }
+  if(!resp.ok){
+    const errText = await resp.text();
+    const err = new Error('Groq API error ' + resp.status + ': ' + errText.slice(0,200) + (resp.status===404?' — model may be retired, check console.groq.com/docs/models.':''));
+    attachRateLimitInfo(err, resp, errText);
+    throw err;
+  }
+  const data = await resp.json();
+  const msg = data.choices && data.choices[0] && data.choices[0].message;
+  if(!msg || !msg.content) throw new Error('No text in AI response.');
+  return msg.content;
+}
+async function callProvider(provider, args){ return provider==='groq' ? callGroq(args) : callClaude(args); }
+async function callAIRobust(args, onStatus){
+  const maxRetries = settings.maxRetries||4;
+  const providerOrder = [settings.backend];
+  if(settings.enableFallback){
+    const other = settings.backend==='groq' ? 'claude' : 'groq';
+    const hasKey = other==='groq' ? !!settings.groqKey : !!settings.apiKey;
+    if(hasKey) providerOrder.push(other);
+  }
+  let lastErr;
+  for(let p=0;p<providerOrder.length;p++){
+    const provider = providerOrder[p];
+    let attempt = 0;
+    while(true){
+      try{ return await callProvider(provider, args); }
+      catch(err){
+        lastErr = err;
+        if(err.isRateLimit && attempt<maxRetries){
+          const waitMs = err.retryAfterMs || RETRY_DELAYS_MS[Math.min(attempt,RETRY_DELAYS_MS.length-1)];
+          onStatus && onStatus(`Busy — waiting ${Math.round(waitMs/1000)}s (retry ${attempt+1}/${maxRetries})…`);
+          await sleep(waitMs); attempt++; continue;
+        }
+        break;
+      }
+    }
+    if(!lastErr.isRateLimit) throw lastErr;
+    if(p<providerOrder.length-1) onStatus && onStatus(`Still busy — switching to fallback provider (${providerOrder[p+1]==='groq'?'Groq':'Claude'})…`);
+  }
+  throw lastErr;
+}
+function safeParseJSON(raw){
+  let t = raw.trim();
+  t = t.replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
+  const first = t.indexOf('{'); const last = t.lastIndexOf('}');
+  if(first>=0 && last>first) t = t.slice(first,last+1);
+  return JSON.parse(t);
+}
+
+/* ======================= CHUNKING ======================= */
+function splitParagraphs(text){ return text.split(/\n{2,}/).filter(s=>s.trim().length>0); }
+function splitSentences(text){
+  const parts = text.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g);
+  return parts ? parts.map(s=>s.trim()).filter(Boolean) : [text];
+}
+function chunkTextSmart(text, maxTokensPerChunk){
+  const paragraphs = splitParagraphs(text);
+  const chunks = []; let current = '';
+  function flush(){ if(current.trim()) chunks.push(current); current=''; }
+  paragraphs.forEach(para=>{
+    const candidate = current ? current+'\n\n'+para : para;
+    if(estimateTokens(candidate)<=maxTokensPerChunk){ current=candidate; return; }
+    flush();
+    if(estimateTokens(para)<=maxTokensPerChunk){ current = para; }
+    else{
+      const sentences = splitSentences(para); let sub='';
+      sentences.forEach(s=>{
+        const c2 = sub? sub+' '+s : s;
+        if(estimateTokens(c2)<=maxTokensPerChunk){ sub=c2; } else { if(sub) chunks.push(sub); sub=s; }
+      });
+      current = sub;
+    }
+  });
+  flush();
+  return chunks.length ? chunks : [text];
+}
+
+/* ======================= PROMPTS ======================= */
+const CATEGORY_MAP = {
+  'Grammar':'grammar','Punctuation':'grammar','Spelling':'spelling','Word Choice':'wordchoice',
+  'Repetition':'repetition','Sentence Structure':'style','Clarity':'style','Conciseness':'style',
+  'Tone Consistency':'style','Logical Consistency':'style','Flow':'style','AI-style Phrasing':'style'
+};
+function catClass(cat){ return 'cat-' + (CATEGORY_MAP[cat] || 'style'); }
+function catColorVar(cat){
+  const k = CATEGORY_MAP[cat] || 'style';
+  return {grammar:'var(--blue)',spelling:'var(--red)',wordchoice:'var(--amber)',repetition:'var(--violet)',style:'var(--teal)'}[k];
+}
+
+function buildRepairSystemPrompt(mode){
+  const modeNote = mode==='quick'
+    ? 'QUICK REPAIR MODE: Fix only clear, objective errors — grammar, spelling, punctuation, subject-verb agreement, tense, missing articles or prepositions, and obviously wrong word choices. Do not rewrite for style, flow, or conciseness. Leave already-correct sentences completely untouched.'
+    : mode==='professional'
+    ? 'PROFESSIONAL REWRITE MODE: Fix all errors, and also improve overall readability, structure, tone, and professionalism. Larger stylistic changes are allowed here, but the original meaning and every fact must be fully preserved — never invent or remove information.'
+    : 'SMART REPAIR MODE: Fix all errors, and also improve clarity, flow, repetition, and sentence structure, while preserving the author\'s voice. Prefer the smallest change that actually fixes the problem — avoid large stylistic rewrites.';
+  return `You are Redline, a meticulous text-repair engine. Read the whole passage first — understand its meaning, tone, and terminology — then repair only what is actually wrong, the way a skilled copyeditor would.
+
+${modeNote}
+
+Priority order, most important first: (1) preserve meaning — never invent facts or remove important information, (2) fix correctness, (3) improve clarity, (4) improve naturalness, (5) improve conciseness and flow. Never "fix" text that is already correct just to sound different. Never leave an obvious multi-part error only partially fixed — if a sentence has several problems, fix all of them.
+
+Respond with ONLY raw JSON (no markdown fences, no commentary) matching exactly this shape:
+{
+  "qualityBefore": 0-100 integer,
+  "qualityAfter": 0-100 integer,
+  "repairedFullText": "the full corrected text for this passage",
+  "issues": [
+    {
+      "original": "exact substring from the input",
+      "corrected": "exact substring from repairedFullText replacing it",
+      "category": "Grammar | Spelling | Punctuation | Word Choice | Sentence Structure | Repetition | Clarity | Conciseness | Tone Consistency | Logical Consistency | Flow | AI-style Phrasing",
+      "confidence": "High | Medium | Low",
+      "reason": "one concise sentence explaining the problem and the fix"
+    }
+  ],
+  "summary": "one short paragraph on the overall condition of the writing and what was done"
+}
+"original" and "corrected" must be EXACT substrings of the input and repairedFullText respectively. High confidence = obvious grammar/spelling error. Medium = likely awkward or unclear wording. Low = optional stylistic improvement — include these but do not apply anything aggressive under Quick Repair mode.`;
+}
+function buildVerificationPrompt(){
+  return `You are a strict quality-control proofreader reviewing another editor's repair of a passage. You will receive the ORIGINAL text and the REPAIRED text. Check specifically whether the meaning of the original is fully preserved (no invented facts, no removed information, no new contradictions), whether any obvious grammar/spelling/punctuation errors remain, and whether the repair introduced any NEW errors that were not in the original.
+
+Respond with ONLY raw JSON (no markdown, no commentary):
+{
+  "meaningPreserved": true or false,
+  "passed": true or false,
+  "notes": "one short sentence explaining your verdict",
+  "additionalIssues": [ { "original":"exact substring of REPAIRED text", "corrected":"exact substring of your further-corrected version", "category":"...", "confidence":"High|Medium|Low", "reason":"..." } ],
+  "finalText": "the repaired text with any additionalIssues applied — identical to the REPAIRED text if nothing further is needed"
+}`;
+}
+
+/* ======================= REPAIR PIPELINE ======================= */
+function computeOffsets(text, issues, field, startKey, endKey){
+  let cursor = 0;
+  issues.forEach(issue=>{
+    const snippet = issue[field];
+    if(!snippet){ issue[startKey]=-1; issue[endKey]=-1; return; }
+    let idx = text.indexOf(snippet, cursor);
+    if(idx===-1) idx = text.indexOf(snippet);
+    if(idx===-1){ issue[startKey]=-1; issue[endKey]=-1; return; }
+    issue[startKey]=idx; issue[endKey]=idx+snippet.length;
+    cursor = idx+snippet.length;
+  });
+}
+
+let lastResult = null;
+
+async function runRepair(){
+  const raw = inputText.value.trim();
+  if(!raw){ toast('Type or paste some text first.'); return; }
+  const hasKey = settings.backend==='groq' ? !!settings.groqKey : !!settings.apiKey;
+  if(!hasKey){ toast('Add your '+(settings.backend==='groq'?'Groq':'Claude')+' API key in Settings first.', 'error'); showView('settings'); return; }
+
+  const btn = document.getElementById('btn-repair');
+  btn.disabled = true; const oldLabel = btn.textContent; btn.textContent = 'Repairing…';
+  const log = document.getElementById('progress-log'); log.innerHTML='';
+  function addLog(msg){ const d=document.createElement('div'); d.className='step active'; d.textContent=msg; log.appendChild(d); log.scrollTop=log.scrollHeight; }
+
+  try{
+    const systemPrompt = buildRepairSystemPrompt(repairMode);
+    const budget = Math.max(300, (settings.maxInputTokens||2200) - estimateTokens(systemPrompt) - 150);
+    const chunks = chunkTextSmart(raw, budget);
+    let repairedParts=[], allIssues=[], qB=[], qA=[], summaryParts=[];
+
+    for(let i=0;i<chunks.length;i++){
+      addLog(`Section ${i+1} of ${chunks.length}: analyzing…`);
+      const respText = await callAIRobust({system:systemPrompt, userText:chunks[i]}, m=>addLog(`Section ${i+1}: ${m}`));
+      let parsed;
+      try{ parsed = safeParseJSON(respText); }
+      catch(e){ throw new Error('Could not parse the AI response for a section: '+e.message); }
+      repairedParts.push(parsed.repairedFullText || chunks[i]);
+      allIssues = allIssues.concat(parsed.issues||[]);
+      if(typeof parsed.qualityBefore==='number') qB.push(parsed.qualityBefore);
+      if(typeof parsed.qualityAfter==='number') qA.push(parsed.qualityAfter);
+      if(parsed.summary) summaryParts.push(parsed.summary);
+    }
+    const avg = arr => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : null;
+    let repairedFullText = repairedParts.join('\n\n');
+    let issues = allIssues.map(i=>({ original:i.original||'', corrected:i.corrected||'', category:i.category||'Grammar', confidence:i.confidence||'Medium', reason:i.reason||'' }));
+
+    let verification = null;
+    if(settings.runVerification){
+      addLog('Running verification pass…');
+      try{
+        const vRaw = await callAIRobust({system:buildVerificationPrompt(), userText:`ORIGINAL:\n${raw}\n\nREPAIRED:\n${repairedFullText}`}, m=>addLog('Verification: '+m));
+        const vParsed = safeParseJSON(vRaw);
+        verification = { passed: !!vParsed.passed, meaningPreserved: !!vParsed.meaningPreserved, notes: vParsed.notes||'' };
+        if(Array.isArray(vParsed.additionalIssues) && vParsed.additionalIssues.length && vParsed.finalText){
+          repairedFullText = vParsed.finalText;
+          issues = issues.concat(vParsed.additionalIssues.map(i=>({ original:i.original||'', corrected:i.corrected||'', category:i.category||'Grammar', confidence:i.confidence||'Medium', reason:i.reason||'' })));
+          addLog(`Verification caught ${vParsed.additionalIssues.length} additional issue(s) — applied.`);
+        }
+      }catch(vErr){
+        verification = { passed:null, meaningPreserved:null, notes:'Verification pass could not complete: '+vErr.message };
+      }
+    }
+
+    computeOffsets(raw, issues, 'original', '_ostart','_oend');
+    computeOffsets(repairedFullText, issues, 'corrected', '_start','_end');
+
+    lastResult = {
+      originalText: raw, repairedText: repairedFullText, issues,
+      qualityBefore: avg(qB) ?? 60, qualityAfter: avg(qA) ?? 90,
+      summary: summaryParts.join(' '), verification, mode: repairMode
+    };
+    addLog('Complete ✓');
+    renderResults(lastResult);
+    document.getElementById('view-input').hidden = true;
+    document.getElementById('view-results').hidden = false;
+  }catch(err){
+    toast(err.message, 'error');
+    addLog('Error: '+err.message);
+  }
+  btn.disabled = false; btn.textContent = oldLabel;
+}
+document.getElementById('btn-repair').addEventListener('click', runRepair);
+
+/* ======================= RESULTS RENDERING ======================= */
+let selectedIssueIdx = null;
+function highlightText(text, issues, field, startKey, endKey){
+  const valid = issues.map((iss,idx)=>({...iss,idx})).filter(i=>i[startKey]>=0).sort((a,b)=>a[startKey]-b[startKey]);
+  let out=''; let pos=0;
+  valid.forEach(iss=>{
+    if(iss[startKey]<pos) return;
+    out += escapeHtml(text.slice(pos, iss[startKey]));
+    out += `<mark class="chg ${catClass(iss.category)}" data-idx="${iss.idx}" title="${escapeHtml(iss.reason||'')}">${escapeHtml(text.slice(iss[startKey], iss[endKey]))}</mark>`;
+    pos = iss[endKey];
+  });
+  out += escapeHtml(text.slice(pos));
+  return out || '<span style="color:var(--text-faint)">(empty)</span>';
+}
+function renderResults(r){
+  selectedIssueIdx = null;
+  document.getElementById('score-before').textContent = r.qualityBefore+'%';
+  document.getElementById('score-after').textContent = r.qualityAfter+'%';
+  document.getElementById('issue-count-label').textContent = r.issues.length + ' issue' + (r.issues.length===1?'':'s') + ' detected';
+
+  const vwrap = document.getElementById('verify-panel-wrap');
+  if(r.verification){
+    const v = r.verification;
+    const cls = v.passed===false ? 'fail' : 'pass';
+    vwrap.innerHTML = `<div class="verify-panel ${cls}"><b>${v.passed===null?'Verification pass incomplete':(v.passed?'Verification passed ✓':'Verification flagged issues')}</b><div class="vp-notes">${escapeHtml(v.notes||'')}</div></div>`;
+  } else { vwrap.innerHTML = ''; }
+
+  const counts = {};
+  r.issues.forEach(i=>{ counts[i.category] = (counts[i.category]||0)+1; });
+  document.getElementById('cat-summary').innerHTML = Object.keys(counts).map(cat=>
+    `<span class="cat-chip"><i style="background:${catColorVar(cat)}"></i>${escapeHtml(cat)} <b>${counts[cat]}</b></span>`
+  ).join('') || '<span class="counter">No issues found — this text was already clean.</span>';
+
+  document.getElementById('pane-original').innerHTML = highlightText(r.originalText, r.issues, 'original', '_ostart','_oend');
+  document.getElementById('pane-repaired').innerHTML = highlightText(r.repairedText, r.issues, 'corrected', '_start','_end');
+  document.querySelectorAll('#pane-original mark, #pane-repaired mark').forEach(m=>{
+    m.addEventListener('click', ()=>{ selectedIssueIdx=+m.dataset.idx; renderInspector(r); highlightSelection(); });
+  });
+
+  document.getElementById('issue-list').innerHTML = r.issues.map((iss,idx)=>`
+    <div class="issue-row" data-idx="${idx}">
+      <span class="cdot" style="background:${catColorVar(iss.category)}"></span>
+      <span class="isum">${escapeHtml((iss.corrected||iss.original||'').slice(0,90))}</span>
+      <span class="icat">${escapeHtml(iss.category)}</span>
+      <span class="iconf">${escapeHtml(iss.confidence)}</span>
+    </div>`).join('') || '<div class="counter">Nothing to show.</div>';
+  document.querySelectorAll('.issue-row').forEach(row=>{
+    row.addEventListener('click', ()=>{ selectedIssueIdx=+row.dataset.idx; renderInspector(r); highlightSelection(); });
+  });
+  document.getElementById('inspector').hidden = true;
+}
+function highlightSelection(){
+  document.querySelectorAll('mark.chg').forEach(m=>m.classList.toggle('selected', +m.dataset.idx===selectedIssueIdx));
+  document.querySelectorAll('.issue-row').forEach((r,idx)=>r.classList.toggle('selected', idx===selectedIssueIdx));
+}
+function renderInspector(r){
+  const box = document.getElementById('inspector');
+  if(selectedIssueIdx===null || !r.issues[selectedIssueIdx]){ box.hidden=true; return; }
+  const iss = r.issues[selectedIssueIdx];
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="ins-head">
+      <span class="cat-tag" style="background:${catColorVar(iss.category)}22;color:${catColorVar(iss.category)}">${escapeHtml(iss.category)}</span>
+      <span class="conf">${escapeHtml(iss.confidence)} confidence</span>
+    </div>
+    <div class="ins-row">
+      <div><div class="ins-label">ORIGINAL</div><div class="ins-text">${escapeHtml(iss.original)||'<em>(none)</em>'}</div></div>
+      <div><div class="ins-label">CORRECTED</div><div class="ins-text">${escapeHtml(iss.corrected)}</div></div>
+    </div>
+    <div class="reason"><b>Why:</b> ${escapeHtml(iss.reason||'No explanation provided.')}</div>`;
+}
+
+/* ======================= EXPORT ======================= */
+function downloadBlob(content, filename, type){
+  const blob = new Blob([content], {type});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+}
+document.getElementById('btn-copy').addEventListener('click', async ()=>{
+  if(!lastResult) return;
+  try{ await navigator.clipboard.writeText(lastResult.repairedText); toast('Copied.', 'success'); }
+  catch(e){ toast('Could not copy — select and copy manually.', 'error'); }
+});
+document.getElementById('btn-export-txt').addEventListener('click', ()=>{
+  if(!lastResult) return;
+  downloadBlob(lastResult.repairedText, 'repaired.txt', 'text/plain');
+});
+document.getElementById('btn-export-pdf').addEventListener('click', ()=>{
+  if(!lastResult) return;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'pt', format:'a4'});
+  const margin=48, maxWidth=595-margin*2;
+  const lines = doc.splitTextToSize(lastResult.repairedText, maxWidth);
+  let y=margin; doc.setFont('helvetica'); doc.setFontSize(11);
+  lines.forEach(line=>{ if(y>842-margin){doc.addPage(); y=margin;} doc.text(line, margin, y); y+=15; });
+  doc.save('repaired.pdf');
+});
+document.getElementById('btn-export-docx').addEventListener('click', async ()=>{
+  if(!lastResult) return;
+  const escXml = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const paras = lastResult.repairedText.split(/\n+/).map(line=>`<w:p><w:r><w:t xml:space="preserve">${escXml(line)}</w:t></w:r></w:p>`).join('');
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paras}<w:sectPr/></w:body></w:document>`;
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`;
+  const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
+  const zip = new JSZip();
+  zip.file('[Content_Types].xml', contentTypes);
+  zip.folder('_rels').file('.rels', rels);
+  zip.folder('word').file('document.xml', documentXml);
+  const blob = await zip.generateAsync({type:'blob'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='repaired.docx'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+});
+
+/* ======================= TEST MODE ======================= */
+const TEST_CASES = [
+  { id:'t1', label:'Subject-verb, tense, article',
+    input:"Artificial intelligence is changing the way people works and it have became a important part of modern life.",
+    gold:"Artificial intelligence is changing the way people work, and it has become an important part of modern life." },
+  { id:'t2', label:'Spelling & punctuation',
+    input:"The recieve of the package was delayed becuase the courrier company made a mistake there adress.",
+    gold:"The receipt of the package was delayed because the courier company made a mistake with their address." },
+  { id:'t3', label:'Run-on sentence',
+    input:"The meeting started late everyone was frustrated the manager apologized and we finally began the discussion around noon.",
+    gold:"The meeting started late, and everyone was frustrated. The manager apologized, and we finally began the discussion around noon." },
+  { id:'t4', label:'Repetition',
+    input:"The report was very good. The report gave good information. The report was helpful and the report was well written.",
+    gold:"The report was very good. It gave helpful information and was well written." },
+  { id:'t5', label:'Ambiguous pronoun / clarity',
+    input:"When the manager told the employee that he had made a mistake, he was not happy about it.",
+    gold:"When the manager told the employee about the mistake, the employee was not happy about it." },
+  { id:'t6', label:'AI-style filler phrasing',
+    input:"It is important to note that, in today's fast-paced world, effective communication plays a crucial role in ensuring successful outcomes.",
+    gold:"Effective communication plays a crucial role in successful outcomes." },
+];
+
+function wordSimilarity(a, b){
+  const wa = (a||'').toLowerCase().replace(/[^\w\s]/g,'').split(/\s+/).filter(Boolean);
+  const wb = (b||'').toLowerCase().replace(/[^\w\s]/g,'').split(/\s+/).filter(Boolean);
+  if(!wa.length && !wb.length) return 1;
+  const dp = Array(wa.length+1).fill(null).map(()=>Array(wb.length+1).fill(0));
+  for(let i=1;i<=wa.length;i++) for(let j=1;j<=wb.length;j++){
+    dp[i][j] = wa[i-1]===wb[j-1] ? dp[i-1][j-1]+1 : Math.max(dp[i-1][j], dp[i][j-1]);
+  }
+  const lcs = dp[wa.length][wb.length];
+  return wa.length+wb.length ? (2*lcs)/(wa.length+wb.length) : 1;
+}
+
+async function runTestSuite(){
+  const hasKey = settings.backend==='groq' ? !!settings.groqKey : !!settings.apiKey;
+  if(!hasKey){ toast('Add an API key in Settings first.', 'error'); showView('settings'); return; }
+  const btn = document.getElementById('btn-run-tests');
+  btn.disabled = true; const old = btn.textContent; btn.textContent = 'Running…';
+  const log = document.getElementById('test-log'); log.innerHTML = '';
+  function addLog(m){ const d=document.createElement('div'); d.className='step active'; d.textContent=m; log.appendChild(d); }
+
+  const results = [];
+  const systemPrompt = buildRepairSystemPrompt('smart');
+  for(const tc of TEST_CASES){
+    addLog(`Running "${tc.label}"…`);
+    try{
+      const raw = await callAIRobust({system:systemPrompt, userText:tc.input}, m=>addLog(m));
+      const parsed = safeParseJSON(raw);
+      const repaired = parsed.repairedFullText || '';
+      const score = wordSimilarity(repaired, tc.gold);
+      results.push({ tc, repaired, issuesFound:(parsed.issues||[]).length, score });
+    }catch(err){
+      results.push({ tc, repaired:'(failed: '+err.message+')', issuesFound:0, score:0, failed:true });
+    }
+  }
+  renderTestResults(results);
+  btn.disabled = false; btn.textContent = old;
+}
+document.getElementById('btn-run-tests').addEventListener('click', runTestSuite);
+
+function renderTestResults(results){
+  const avgScore = Math.round((results.reduce((a,r)=>a+r.score,0)/results.length)*100);
+  const wrap = document.getElementById('test-results');
+  wrap.innerHTML = `
+    <div class="accuracy-hero"><span class="av">${avgScore}%</span><span class="al">Repair Accuracy (word-overlap match against expected correction)</span></div>
+    <table class="test-table">
+      <thead><tr><th>Test</th><th>Input</th><th>Repaired output</th><th>Issues found</th><th>Match</th></tr></thead>
+      <tbody>
+        ${results.map(r=>{
+          const pct = Math.round(r.score*100);
+          const badge = r.failed ? 'bad' : pct>=90 ? 'good' : pct>=70 ? 'mid' : 'bad';
+          return `<tr>
+            <td>${escapeHtml(r.tc.label)}</td>
+            <td class="test-snip">${escapeHtml(r.tc.input)}</td>
+            <td class="test-snip">${escapeHtml(r.repaired)}</td>
+            <td>${r.issuesFound}</td>
+            <td><span class="pass-badge ${badge}">${pct}%</span></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+}
+
+/* ======================= SETTINGS ======================= */
+function toggleBackendFields(){
+  const b = document.getElementById('set-backend').value;
+  document.getElementById('settings-claude').style.display = b==='claude' ? '' : 'none';
+  document.getElementById('settings-groq').style.display = b==='groq' ? '' : 'none';
+}
+function renderSettings(){
+  document.getElementById('set-backend').value = settings.backend;
+  document.getElementById('set-apikey').value = settings.apiKey;
+  document.getElementById('set-model').value = settings.model;
+  document.getElementById('set-groqkey').value = settings.groqKey;
+  document.getElementById('set-groqmodel').value = settings.groqModel;
+  document.getElementById('set-groqendpoint').value = settings.groqEndpoint;
+  document.getElementById('set-maxinput').value = settings.maxInputTokens;
+  document.getElementById('set-maxretries').value = settings.maxRetries;
+  document.getElementById('set-verify').checked = settings.runVerification;
+  updateVerifySlider();
+  toggleBackendFields();
+}
+document.getElementById('set-backend').addEventListener('change', toggleBackendFields);
+function updateVerifySlider(){
+  const slider = document.getElementById('verify-slider');
+  const checked = document.getElementById('set-verify').checked;
+  slider.style.background = checked ? 'var(--red-soft)' : 'var(--bg-elev-2)';
+  slider.style.borderColor = checked ? 'var(--red)' : 'var(--border)';
+  slider.style.setProperty('--knob', checked ? '17px' : '2px');
+  slider.innerHTML = `<span style="position:absolute;width:15px;height:15px;left:${checked?17:2}px;top:2px;background:${checked?'var(--red)':'var(--text-faint)'};border-radius:50%;transition:.15s;"></span>`;
+}
+document.getElementById('set-verify').addEventListener('change', updateVerifySlider);
+document.getElementById('verify-slider').addEventListener('click', ()=>{
+  const cb = document.getElementById('set-verify'); cb.checked = !cb.checked; updateVerifySlider();
+});
+document.getElementById('btn-save-settings').addEventListener('click', ()=>{
+  settings = {
+    backend: document.getElementById('set-backend').value,
+    apiKey: document.getElementById('set-apikey').value.trim(),
+    model: document.getElementById('set-model').value.trim() || 'claude-sonnet-5',
+    groqKey: document.getElementById('set-groqkey').value.trim(),
+    groqModel: document.getElementById('set-groqmodel').value.trim() || 'openai/gpt-oss-120b',
+    groqEndpoint: document.getElementById('set-groqendpoint').value.trim(),
+    maxInputTokens: parseInt(document.getElementById('set-maxinput').value,10) || 2200,
+    maxOutputTokens: 1400,
+    maxRetries: Math.max(0, parseInt(document.getElementById('set-maxretries').value,10) || 4),
+    enableFallback: true,
+    runVerification: document.getElementById('set-verify').checked
+  };
+  saveSettingsToStorage(settings);
+  toast('Settings saved.', 'success');
+});
+
+/* ======================= GLOBAL ERROR SURFACING ======================= */
+window.addEventListener('error', (e)=>{ toast('Something went wrong: ' + (e.message||'unknown error'), 'error'); });
+window.addEventListener('unhandledrejection', (e)=>{ toast('Something went wrong: ' + ((e.reason&&e.reason.message)||e.reason||'unknown error'), 'error'); });
+
+/* ======================= INIT ======================= */
+updateCounter();
+</script>
+</body>
+</html>
